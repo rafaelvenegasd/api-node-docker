@@ -1,0 +1,31 @@
+{
+  "name": "lambda-orchestrator",
+  "version": "1.0.0",
+  "description": "B2B Order Orchestrator Lambda",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "serverless offline",
+    "deploy": "serverless deploy",
+    "test": "jest"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "zod": "^3.22.4",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.130",
+    "@types/node": "^20.10.5",
+    "@types/uuid": "^9.0.7",
+    "serverless": "^3.38.0",
+    "serverless-offline": "^13.3.3",
+    "serverless-dotenv-plugin": "^6.0.0",
+    "typescript": "^5.3.3",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.8"
+  },
+  "keywords": ["aws", "lambda", "serverless", "nodejs", "orchestrator"],
+  "author": "Technical Test Implementation",
+  "license": "MIT"
+}

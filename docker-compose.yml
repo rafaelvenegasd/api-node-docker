@@ -1,0 +1,115 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: b2b-orders-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_NAME:-b2b_orders}
+      MYSQL_USER: ${DB_USER:-b2b_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-b2b_password}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-rootpassword}"]
+      timeout: 10s
+      retries: 5
+      interval: 10s
+
+  # Customers API
+  customers-api:
+    build:
+      context: ./customers-api
+      dockerfile: Dockerfile
+    container_name: customers-api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-b2b_user}
+      DB_PASSWORD: ${DB_PASSWORD:-b2b_password}
+      DB_NAME: ${DB_NAME:-b2b_orders}
+      DB_CONNECTION_LIMIT: 10
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      JWT_EXPIRES_IN: 24h
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-your-service-token-change-in-production}
+      PORT: 3001
+      NODE_ENV: development
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./customers-api:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run migrate && npm run seed && npm run dev"
+
+  # Orders API
+  orders-api:
+    build:
+      context: ./orders-api
+      dockerfile: Dockerfile
+    container_name: orders-api
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-b2b_user}
+      DB_PASSWORD: ${DB_PASSWORD:-b2b_password}
+      DB_NAME: ${DB_NAME:-b2b_orders}
+      DB_CONNECTION_LIMIT: 10
+      CUSTOMERS_API_BASE: http://customers-api:3001/api/v1
+      CUSTOMERS_API_TOKEN: ${SERVICE_TOKEN:-your-service-token-change-in-production}
+      PORT: 3002
+      NODE_ENV: development
+    depends_on:
+      mysql:
+        condition: service_healthy
+      customers-api:
+        condition: service_started
+    volumes:
+      - ./orders-api:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run migrate && npm run seed && npm run dev"
+
+  # Lambda Orchestrator (Local Development)
+  lambda-orchestrator:
+    build:
+      context: ./lambda-orchestrator
+      dockerfile: Dockerfile
+    container_name: lambda-orchestrator
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      CUSTOMERS_API_BASE: http://customers-api:3001/api/v1
+      ORDERS_API_BASE: http://orders-api:3002/api/v1
+      CUSTOMERS_API_TOKEN: ${SERVICE_TOKEN:-your-service-token-change-in-production}
+      NODE_ENV: development
+    depends_on:
+      customers-api:
+        condition: service_started
+      orders-api:
+        condition: service_started
+    volumes:
+      - ./lambda-orchestrator:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev"
+
+volumes:
+  mysql_data:
+
+networks:
+  default:
+    name: b2b-orders-network

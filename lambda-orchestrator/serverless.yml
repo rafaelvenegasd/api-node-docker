@@ -1,0 +1,42 @@
+service: b2b-order-orchestrator
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  stage: ${opt:stage, 'dev'}
+  region: us-east-1
+  environment:
+    CUSTOMERS_API_BASE: http://localhost:3001/api/v1
+    ORDERS_API_BASE: http://localhost:3002/api/v1
+    CUSTOMERS_API_TOKEN: your-service-token-change-in-production
+    NODE_ENV: development
+
+functions:
+  createAndConfirmOrder:
+    handler: dist/index.createAndConfirmOrder
+    events:
+      - http:
+          path: orchestrator/create-and-confirm-order
+          method: post
+          cors: true
+    timeout: 30
+    memorySize: 256
+
+plugins:
+  - serverless-dotenv-plugin
+  - serverless-offline
+
+custom:
+  dotenv:
+    path: .env
+  serverless-offline:
+    host: 0.0.0.0
+    port: 3000
+
+package:
+  patterns:
+    - 'dist/**'
+    - 'node_modules/**'
+    - '!test/**'
+    - '!.git/**'
+    - '!.serverless/**'

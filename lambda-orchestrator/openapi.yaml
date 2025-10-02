@@ -1,0 +1,220 @@
+openapi: 3.0.0
+info:
+  title: Order Orchestrator Lambda
+  description: B2B Order Orchestration Service - Creates and confirms orders atomically
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+
+servers:
+  - url: http://localhost:3000/dev
+    description: Local development server (via serverless-offline)
+  - url: https://your-api-id.execute-api.us-east-1.amazonaws.com/dev
+    description: AWS Lambda deployment
+
+components:
+  schemas:
+    OrchestratorRequest:
+      type: object
+      required:
+        - customer_id
+        - items
+        - idempotency_key
+      properties:
+        customer_id:
+          type: integer
+          minimum: 1
+          description: "ID of the customer placing the order"
+          example: 1
+        items:
+          type: array
+          minItems: 1
+          description: "List of items to order"
+          items:
+            type: object
+            required:
+              - product_id
+              - qty
+            properties:
+              product_id:
+                type: integer
+                minimum: 1
+                description: "ID of the product"
+                example: 2
+              qty:
+                type: integer
+                minimum: 1
+                description: "Quantity of the product"
+                example: 3
+        idempotency_key:
+          type: string
+          minLength: 1
+          description: "Unique key to ensure idempotent operation"
+          example: "abc-123"
+        correlation_id:
+          type: string
+          description: "Optional correlation ID for request tracing"
+          example: "req-789"
+
+    CustomerInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "ACME Corporation"
+        email:
+          type: string
+          format: email
+          example: "ops@acme.com"
+        phone:
+          type: string
+          example: "+1-555-0101"
+
+    OrderInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 101
+        status:
+          type: string
+          enum: [CREATED, CONFIRMED, CANCELED]
+          example: "CONFIRMED"
+        total_cents:
+          type: integer
+          description: "Total order amount in cents"
+          example: 389700
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id:
+                type: integer
+                example: 2
+              qty:
+                type: integer
+                example: 3
+              unit_price_cents:
+                type: integer
+                example: 2599
+              subtotal_cents:
+                type: integer
+                example: 7797
+
+    OrchestratorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        correlationId:
+          type: string
+          description: "Correlation ID for the request"
+          example: "req-789"
+        data:
+          type: object
+          properties:
+            customer:
+              $ref: '#/components/schemas/CustomerInfo'
+            order:
+              $ref: '#/components/schemas/OrderInfo'
+        error:
+          type: string
+          description: "Error message if success is false"
+          example: "Customer validation failed"
+
+paths:
+  /orchestrator/create-and-confirm-order:
+    post:
+      summary: Create and confirm order atomically
+      description: |
+        Orchestrates the complete order lifecycle:
+        1. Validates customer exists and is active
+        2. Creates order with stock validation and deduction
+        3. Confirms order with idempotency protection
+        4. Returns consolidated customer and order information
+      tags:
+        - Orchestrator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrchestratorRequest'
+      responses:
+        '201':
+          description: Order created and confirmed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestratorResponse'
+              example:
+                success: true
+                correlationId: "req-789"
+                data:
+                  customer:
+                    id: 1
+                    name: "ACME Corporation"
+                    email: "ops@acme.com"
+                    phone: "+1-555-0101"
+                  order:
+                    id: 101
+                    status: "CONFIRMED"
+                    total_cents: 389700
+                    items:
+                      - product_id: 2
+                        qty: 3
+                        unit_price_cents: 2599
+                        subtotal_cents: 7797
+        '400':
+          description: Invalid request data or business validation failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestratorResponse'
+              examples:
+                validation_error:
+                  value:
+                    success: false
+                    correlationId: "req-789"
+                    error: "Invalid request data"
+                business_error:
+                  value:
+                    success: false
+                    correlationId: "req-789"
+                    error: "Insufficient stock for product Wireless Mouse"
+        '404':
+          description: Customer or products not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestratorResponse'
+              example:
+                success: false
+                correlationId: "req-789"
+                error: "Customer not found"
+        '409':
+          description: Idempotency key conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestratorResponse'
+              example:
+                success: false
+                correlationId: "req-789"
+                error: "Idempotency key already used for different operation"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestratorResponse'
+              example:
+                success: false
+                correlationId: "req-789"
+                error: "Internal server error"

@@ -1,0 +1,658 @@
+openapi: 3.0.0
+info:
+  title: Orders API
+  description: B2B Orders and Products Management API
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+
+servers:
+  - url: http://localhost:3002/api/v1
+    description: Development server
+  - url: https://api.example.com/api/v1
+    description: Production server
+
+components:
+  schemas:
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        sku:
+          type: string
+          example: "LAPTOP-001"
+        name:
+          type: string
+          example: "Professional Laptop"
+        price_cents:
+          type: integer
+          example: 129900
+        stock:
+          type: integer
+          example: 50
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-01T09:00:00Z"
+
+    CreateProductRequest:
+      type: object
+      required:
+        - sku
+        - name
+        - price_cents
+      properties:
+        sku:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "LAPTOP-001"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: "Professional Laptop"
+        price_cents:
+          type: integer
+          minimum: 0
+          example: 129900
+        stock:
+          type: integer
+          minimum: 0
+          default: 0
+          example: 50
+
+    UpdateProductRequest:
+      type: object
+      properties:
+        sku:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "LAPTOP-002"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: "Updated Laptop Name"
+        price_cents:
+          type: integer
+          minimum: 0
+          example: 139900
+        stock:
+          type: integer
+          minimum: 0
+          example: 75
+
+    ProductQuery:
+      type: object
+      properties:
+        search:
+          type: string
+          maxLength: 255
+          description: "Search term for SKU or name"
+          example: "laptop"
+        cursor:
+          type: integer
+          description: "Pagination cursor"
+          example: 10
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+          example: 20
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        customer_id:
+          type: integer
+          example: 1
+        status:
+          type: string
+          enum: [CREATED, CONFIRMED, CANCELED]
+          example: "CONFIRMED"
+        total_cents:
+          type: integer
+          example: 389700
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-01T14:00:00Z"
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+
+    OrderItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        order_id:
+          type: integer
+          example: 1
+        product_id:
+          type: integer
+          example: 2
+        qty:
+          type: integer
+          example: 3
+        unit_price_cents:
+          type: integer
+          example: 2599
+        subtotal_cents:
+          type: integer
+          example: 7797
+
+    CreateOrderRequest:
+      type: object
+      required:
+        - customer_id
+        - items
+      properties:
+        customer_id:
+          type: integer
+          minimum: 1
+          example: 1
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required:
+              - product_id
+              - qty
+            properties:
+              product_id:
+                type: integer
+                minimum: 1
+                example: 2
+              qty:
+                type: integer
+                minimum: 1
+                example: 3
+
+    ConfirmOrderRequest:
+      type: object
+      required:
+        - idempotency_key
+      properties:
+        idempotency_key:
+          type: string
+          minLength: 1
+          example: "abc-123"
+
+    CancelOrderRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          example: "Customer requested cancellation"
+
+    OrderQuery:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [CREATED, CONFIRMED, CANCELED]
+          example: "CREATED"
+        from:
+          type: string
+          format: date-time
+          example: "2024-01-01T00:00:00Z"
+        to:
+          type: string
+          format: date-time
+          example: "2024-01-31T23:59:59Z"
+        cursor:
+          type: integer
+          description: "Pagination cursor"
+          example: 10
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+          example: 20
+
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          oneOf:
+            - $ref: '#/components/schemas/Product'
+            - $ref: '#/components/schemas/Order'
+        error:
+          type: string
+          example: "Error message"
+
+    PaginatedResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/Product'
+              - $ref: '#/components/schemas/Order'
+        pagination:
+          type: object
+          properties:
+            cursor:
+              type: integer
+              example: 10
+            limit:
+              type: integer
+              example: 10
+            hasMore:
+              type: boolean
+              example: true
+        error:
+          type: string
+          example: "Error message"
+
+paths:
+  # Product endpoints
+  /products:
+    post:
+      summary: Create a new product
+      description: Creates a new product with the provided information
+      tags:
+        - Products
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Product created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '409':
+          description: SKU already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+    get:
+      summary: Get products list
+      description: Retrieves a paginated list of products with optional search
+      tags:
+        - Products
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 255
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: List of products retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /products/{id}:
+    get:
+      summary: Get product by ID
+      description: Retrieves a specific product by their ID
+      tags:
+        - Products
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Product retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '400':
+          description: Invalid product ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+    patch:
+      summary: Update product
+      description: Updates an existing product's information
+      tags:
+        - Products
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Product updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '400':
+          description: Invalid request data or product ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '409':
+          description: SKU already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  # Order endpoints
+  /orders:
+    post:
+      summary: Create a new order
+      description: Creates a new order with customer validation and stock verification
+      tags:
+        - Orders
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '201':
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '400':
+          description: Invalid request data or insufficient stock
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '404':
+          description: Customer or products not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+    get:
+      summary: Get orders list
+      description: Retrieves a paginated list of orders with optional filters
+      tags:
+        - Orders
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [CREATED, CONFIRMED, CANCELED]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: List of orders retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /orders/{id}:
+    get:
+      summary: Get order by ID
+      description: Retrieves a specific order by ID with full details
+      tags:
+        - Orders
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Order retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '400':
+          description: Invalid order ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /orders/{id}/confirm:
+    post:
+      summary: Confirm an order
+      description: Confirms an order with idempotency key protection
+      tags:
+        - Orders
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmOrderRequest'
+      responses:
+        '200':
+          description: Order confirmed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '400':
+          description: Invalid request data or order cannot be confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /orders/{id}/cancel:
+    post:
+      summary: Cancel an order
+      description: Cancels an order and restores product stock
+      tags:
+        - Orders
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelOrderRequest'
+      responses:
+        '200':
+          description: Order canceled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '400':
+          description: Invalid order ID or order cannot be canceled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
